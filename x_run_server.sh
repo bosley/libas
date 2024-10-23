@@ -1,0 +1,3 @@
+export LIBAS_TOKEN="THIS_IS_MY_TOKEN_THERE_ARE_MANY_LIKE_IT_BUT_THIS_ONE_IS_MINE"
+# OPTIONALLY: ./libas --cert server.crt --key server.key --whisper /Users/bosley/workspace/libas/whisper.cpp/main --model /Users/bosley/workspace/libas/whisper.cpp/models/ggml-medium.en-q5_0.bin
+./libas --cert server.crt --key server.key --whisper /Users/bosley/workspace/libas/whisper.cpp/main --model /Users/bosley/workspace/libas/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Libas Transcription Monitor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .client {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-left: 3px solid #007bff;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            font-size: 1.2em;
+            margin-top: 0;
+        }
+        .client-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .client-link {
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        .client-link:hover {
+            text-decoration: underline;
+            color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Libas Transcription Monitor</h1>
+    <div id="clients"></div>
+
+    <script>
+        function connectWebSocket(clientId) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws/${clientId}`);
+            
+            ws.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    if (!message || !message.timestamp || !message.text) {
+                        console.warn('Received malformed message:', message);
+                        return;
+                    }
+                    appendMessage(clientId, message);
+                } catch (error) {
+                    console.error('Failed to parse message:', error, event.data);
+                }
+            };
+
+            ws.onclose = function() {
+                console.log(`WebSocket closed for client ${clientId}, reconnecting...`);
+                setTimeout(() => connectWebSocket(clientId), 1000);
+            };
+
+            ws.onerror = function(error) {
+                console.error(`WebSocket error for client ${clientId}:`, error);
+            };
+        }
+
+        function appendMessage(clientId, message) {
+            const clientDiv = document.getElementById(`client-${clientId}`);
+            if (!clientDiv) {
+                console.warn(`Client div not found for ${clientId}`);
+                return;
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            
+            // Add error checking for timestamp
+            let timeStr;
+            try {
+                timeStr = new Date(message.timestamp).toLocaleTimeString();
+                if (timeStr === 'Invalid Date') {
+                    console.warn('Invalid timestamp:', message.timestamp);
+                    timeStr = 'Unknown time';
+                }
+            } catch (error) {
+                console.error('Error parsing timestamp:', error);
+                timeStr = 'Unknown time';
+            }
+            
+            messageDiv.textContent = `${timeStr}: ${message.text || 'No text'}`;
+            
+            // Insert new message at the top
+            const firstMessage = clientDiv.querySelector('.message');
+            if (firstMessage) {
+                clientDiv.insertBefore(messageDiv, firstMessage);
+            } else {
+                clientDiv.appendChild(messageDiv);
+            }
+        }
+
+        let lastUpdate = {};
+
+        function updateClients() {
+            fetch('/api/clients')
+                .then(response => response.json())
+                .then(clients => {
+                    const clientsDiv = document.getElementById('clients');
+                    
+                    // Create new clients that don't exist
+                    Object.entries(clients).forEach(([clientId, message]) => {
+                        if (!document.getElementById(`client-${clientId}`)) {
+                            const clientDiv = document.createElement('div');
+                            clientDiv.className = 'client';
+                            clientDiv.id = `client-${clientId}`;
+                            
+                            const headerDiv = document.createElement('div');
+                            headerDiv.className = 'client-header';
+                            
+                            const header = document.createElement('h2');
+                            const link = document.createElement('a');
+                            link.href = `/api/clients/${clientId}`;
+                            link.className = 'client-link';
+                            link.textContent = `Client: ${clientId}`;
+                            link.target = '_blank'; // Opens in new tab
+                            
+                            header.appendChild(link);
+                            headerDiv.appendChild(header);
+                            clientDiv.appendChild(headerDiv);
+                            
+                            clientsDiv.appendChild(clientDiv);
+                            connectWebSocket(clientId);
+                        }
+                        
+                        // Only update if message is different from last update
+                        const lastMsg = lastUpdate[clientId];
+                        if (!lastMsg || lastMsg.timestamp !== message.timestamp || lastMsg.text !== message.text) {
+                            if (message && message.timestamp && message.text) {
+                                appendMessage(clientId, message);
+                                lastUpdate[clientId] = message;
+                            }
+                        }
+                    });
+                    
+                    // Remove disconnected clients
+                    Array.from(clientsDiv.children).forEach(clientDiv => {
+                        const clientId = clientDiv.id.replace('client-', '');
+                        if (!clients[clientId]) {
+                            clientDiv.remove();
+                            delete lastUpdate[clientId];
+                        }
+                    });
+                })
+                .catch(error => console.error('Error fetching clients:', error));
+        }
+
+        // Initial load
+        updateClients();
+
+        // Update every second
+        setInterval(updateClients, 500);
+    </script>
+</body>
+</html>
